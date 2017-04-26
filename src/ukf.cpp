@@ -52,6 +52,7 @@ UKF::UKF() {
 
   Hint: one or more values initialized above might be wildly off...
   */
+  is_initialized_ = false;
 }
 
 UKF::~UKF() {}
@@ -67,6 +68,48 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
+  VectorXd raw_meas = meas_package.raw_measurements_;
+
+  if (!is_initialized_) {
+    if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
+      x_[0] = raw_meas[0];
+      x_[1] = raw_meas[1];
+      x_[2] = 0;
+      x_[3] = 0;
+      x_[4] = 0;
+    } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+      double x_proj = cos(raw_meas[1]);
+      double y_proj = sin(raw_meas[1]);
+      x_[0] = raw_meas[0] * x_proj;
+      x_[1] = raw_meas[0] * y_proj;
+      x_[2] = 0;
+      x_[3] = 0;
+      x_[4] = 0;
+    }
+
+    P_ << 1, 0, 0, 0, 0,
+          0, 1, 0, 0, 0,
+          0, 0, 1000, 0, 0,
+          0, 0, 0, 1000, 0,
+          0, 0, 0, 0, 1000;
+
+    time_us_ = meas_package.timestamp_;
+    is_initialized_ = true;
+    return;
+  }
+
+  long long curr_time_us = meas_package.timestamp_;
+  if (meas_package.sensor_type_ == MeasurementPackage::LASER && use_laser_) {
+    double delta_t = curr_time_us - time_us_;
+    Prediction(delta_t);
+    UpdateLidar(meas_package);
+    time_us_ = curr_time_us;
+  } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR && use_radar_) {
+    double delta_t = curr_time_us - time_us_;
+    Prediction(delta_t);
+    UpdateRadar(meas_package);
+    time_us_ = curr_time_us;
+  }
 }
 
 /**
