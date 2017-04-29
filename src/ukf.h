@@ -77,6 +77,12 @@ public:
   // reference to tools
   Tools tools;
 
+  // size of measurement vector for radar
+  int n_z_radar_;
+
+  // size of measurement vector for laser
+  int n_z_laser_;
+
   MatrixXd Q_;
 
   // radar measurement noise covariance

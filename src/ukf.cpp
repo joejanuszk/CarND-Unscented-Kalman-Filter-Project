@@ -54,6 +54,12 @@ UKF::UKF() {
   */
   is_initialized_ = false;
 
+  // radar can measure r, phi, and r_dot
+  n_z_radar_ = 3;
+
+  // laser can measure px and py
+  n_z_laser_ = 2;
+
   n_x_ = 5;
   n_aug_ = 7;
 
@@ -242,34 +248,31 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   You'll also need to calculate the lidar NIS.
   */
 
-  // laser measures px and py
-  const int n_z = 2;
-
-  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+  MatrixXd Zsig = MatrixXd(n_z_laser_, 2 * n_aug_ + 1);
   for (int i = 0; i < Xsig_pred_.cols(); ++i) {
     VectorXd xsig_pred = Xsig_pred_.col(i);
     const double px = xsig_pred(0);
     const double py = xsig_pred(1);
 
-    VectorXd zsig = VectorXd(n_z);
+    VectorXd zsig = VectorXd(n_z_laser_);
     zsig(0) = px;
     zsig(1) = py;
     Zsig.col(i) = zsig;
   }
 
-  VectorXd z_pred = VectorXd::Zero(n_z);
+  VectorXd z_pred = VectorXd::Zero(n_z_laser_);
   for (int i = 0; i < Zsig.cols(); ++i) {
     z_pred += weights_(i) * Zsig.col(i);
   }
 
-  MatrixXd S = MatrixXd::Zero(n_z, n_z);
+  MatrixXd S = MatrixXd::Zero(n_z_laser_, n_z_laser_);
   for (int i = 0; i < Zsig.cols(); ++i) {
     MatrixXd z_diff = Zsig.col(i) - z_pred;
     S += weights_(i) * z_diff * z_diff.transpose();
   }
   S += R_laser_;
 
-  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z_laser_);
   for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
     VectorXd z_diff = Zsig.col(i) - z_pred;
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
@@ -302,10 +305,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   You'll also need to calculate the radar NIS.
   */
 
-  // radar can measure r, phi, and r_dot
-  const int n_z = 3;
-
-  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+  MatrixXd Zsig = MatrixXd(n_z_radar_, 2 * n_aug_ + 1);
   for (int i = 0; i < Xsig_pred_.cols(); ++i) {
     VectorXd xsig_pred = Xsig_pred_.col(i);
     const double px = xsig_pred(0);
@@ -314,19 +314,19 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     const double psi = xsig_pred(3);
     const double p_mag = sqrt(px * px + py * py);
 
-    VectorXd zsig = VectorXd(n_z);
+    VectorXd zsig = VectorXd(n_z_radar_);
     zsig(0) = p_mag;
     zsig(1) = atan2(py, px);
     zsig(2) = (px * cos(psi) * v + py * sin(psi) * v) / p_mag;
     Zsig.col(i) = zsig;
   }
 
-  VectorXd z_pred = VectorXd::Zero(n_z);
+  VectorXd z_pred = VectorXd::Zero(n_z_radar_);
   for (int i = 0; i < Zsig.cols(); ++i) {
     z_pred += weights_(i) * Zsig.col(i);
   }
 
-  MatrixXd S = MatrixXd::Zero(n_z, n_z);
+  MatrixXd S = MatrixXd::Zero(n_z_radar_, n_z_radar_);
   for (int i = 0; i < Zsig.cols(); ++i) {
     MatrixXd z_diff = Zsig.col(i) - z_pred;
     z_diff(1) = tools.NormalizeAngle(z_diff(1));
@@ -334,7 +334,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   }
   S += R_radar_;
 
-  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z_radar_);
   for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
     VectorXd z_diff = Zsig.col(i) - z_pred;
     z_diff(1) = tools.NormalizeAngle(z_diff(1));
