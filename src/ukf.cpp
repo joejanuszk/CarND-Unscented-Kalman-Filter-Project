@@ -280,7 +280,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
     Tc += weights_(i) * x_diff * z_diff.transpose();
   }
 
-  MatrixXd K = Tc * S.inverse();
+  MatrixXd Sinv = S.inverse();
+  MatrixXd K = Tc * Sinv;
   VectorXd raw_meas = meas_package.raw_measurements_;
   VectorXd z = VectorXd(2);
   z << raw_meas[0],
@@ -289,6 +290,12 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   x_ = x_ + K * z_diff;
   P_ = P_ - K * S * K.transpose();
+
+  // coerce vector into matrix so transpose works
+  MatrixXd z_diff_mat = z_diff;
+  // NIS is a 1x1 matrix
+  MatrixXd NIS = z_diff_mat.transpose() * Sinv * z_diff_mat;
+  NIS_laser_ = NIS(0, 0);
 }
 
 /**
@@ -343,7 +350,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     Tc += weights_(i) * x_diff * z_diff.transpose();
   }
 
-  MatrixXd K = Tc * S.inverse();
+  MatrixXd Sinv = S.inverse();
+  MatrixXd K = Tc * Sinv;
   VectorXd raw_meas = meas_package.raw_measurements_;
   VectorXd z = VectorXd(3);
   z << raw_meas[0],
@@ -354,4 +362,10 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   x_ = x_ + K * z_diff;
   P_ = P_ - K * S * K.transpose();
+
+  // coerce vector into matrix so transpose works
+  MatrixXd z_diff_mat = z_diff;
+  // NIS is a 1x1 matrix
+  MatrixXd NIS = z_diff_mat.transpose() * Sinv * z_diff_mat;
+  NIS_radar_ = NIS(0, 0);
 }
