@@ -13,8 +13,7 @@ using std::vector;
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  // TODO get laser working
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -26,10 +25,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 1; //30;
+  std_a_ = 1;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = M_PI / 4; //30;
+  std_yawdd_ = M_PI / 8;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -72,6 +71,10 @@ UKF::UKF() {
   R_radar_ << std_radr_ * std_radr_, 0, 0,
               0, std_radphi_ * std_radphi_, 0,
               0, 0, std_radrd_ * std_radrd_;
+
+  R_laser_ = MatrixXd(2, 2);
+  R_laser_ << std_laspx_ * std_laspx_, 0,
+              0, std_laspy_ * std_laspy_;
 }
 
 UKF::~UKF() {}
@@ -106,11 +109,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       x_[4] = 0;
     }
 
-    P_ << 1, 0, 0, 0, 0,
-          0, 1, 0, 0, 0,
-          0, 0, 1000, 0, 0,
-          0, 0, 0, 1000, 0,
-          0, 0, 0, 0, 1000;
+    // assume unity covariance to start
+    P_ << MatrixXd::Identity(n_x_, n_x_);
 
     time_us_ = meas_package.timestamp_;
     is_initialized_ = true;
@@ -162,55 +162,66 @@ void UKF::Prediction(double delta_t) {
   Xsig_pred_ = MatrixXd(n_x_, n_aug_ * 2 + 1);
 
   for (int i = 0; i < Xsig_aug.cols(); ++i) {
-    VectorXd x_aug_col = Xsig_aug.col(i);
-    const double px        = x_aug_col(0);
-    const double py        = x_aug_col(1);
-    const double v         = x_aug_col(2);
-    const double psi       = x_aug_col(3);
-    const double psi_dot   = x_aug_col(4);
-    const double nu_a      = x_aug_col(5);
-    const double nu_psi_dd = x_aug_col(6);
+    // make the use of these components easier to read
+    const double px        = Xsig_aug(0, i);
+    const double py        = Xsig_aug(1, i);
+    const double v         = Xsig_aug(2, i);
+    const double psi       = Xsig_aug(3, i);
+    const double psi_dot   = Xsig_aug(4, i);
+    const double nu_a      = Xsig_aug(5, i);
+    const double nu_psi_dd = Xsig_aug(6, i);
+
+    double px_p;
+    double py_p;
+
+    // cache repeated calculations
+    const double cos_psi = cos(psi);
+    const double sin_psi = sin(psi);
+    double half_dt2 = 0.5 * delta_t * delta_t;
 
     VectorXd x_pred = VectorXd(n_x_);
     if (fabs(psi_dot) < 0.001) {
-      x_pred(0) = v * cos(psi) * delta_t;
-      x_pred(1) = v * sin(psi) * delta_t;
-      x_pred(2) = 0;
-      x_pred(3) = 0; // psi_dot * dt is always zero here
-      x_pred(4) = 0;
+      // cache repeated calculations
+      const double v_delta_t = v * delta_t;
+      px_p = px + v_delta_t * cos_psi;
+      py_p = py + v_delta_t * sin_psi;
     } else {
-      const double c = (v / psi_dot);
-      const double psi_dot_dt = psi_dot * delta_t;
-      const double psi_plus_psi_dot_dt = psi + psi_dot_dt;
-      x_pred(0) = c * (+sin(psi_plus_psi_dot_dt) - sin(psi));
-      x_pred(1) = c * (-cos(psi_plus_psi_dot_dt) + cos(psi));
-      x_pred(2) = 0;
-      x_pred(3) = psi_dot_dt;
-      x_pred(4) = 0;
+      // cache repeated calculations
+      const double psi_plus_psi_dot_dt = psi + psi_dot * delta_t;
+      const double v_div_psi_dot = v / psi_dot;
+
+      px_p = px + v_div_psi_dot * (+sin(psi_plus_psi_dot_dt) - sin_psi);
+      py_p = py + v_div_psi_dot * (-cos(psi_plus_psi_dot_dt) + cos_psi);
     }
 
-    VectorXd x_k = x_aug.head(n_x_);
-    VectorXd x_noise = VectorXd(n_x_);
-    const double half_dt2 = 0.5 * delta_t * delta_t;
-    x_noise(0) = half_dt2 * cos(psi) + nu_a;
-    x_noise(1) = half_dt2 * sin(psi) + nu_a;
-    x_noise(2) = delta_t * nu_a;
-    x_noise(3) = half_dt2 * nu_psi_dd;
-    x_noise(4) = delta_t * nu_psi_dd;
-    Xsig_pred_.col(i) = x_k + x_pred + x_noise;
+    double v_p = v;
+    double psi_p = psi + psi_dot * delta_t;
+    double psi_dot_p = psi_dot;
+
+    px_p += nu_a * cos_psi * half_dt2;
+    py_p += nu_a * sin_psi * half_dt2;
+    v_p += nu_a * delta_t;
+
+    psi_p += nu_psi_dd * half_dt2;
+    psi_dot_p += nu_psi_dd * delta_t;
+
+    Xsig_pred_(0, i) = px_p;
+    Xsig_pred_(1, i) = py_p;
+    Xsig_pred_(2, i) = v_p;
+    Xsig_pred_(3, i) = psi_p;
+    Xsig_pred_(4, i) = psi_dot_p;
   }
 
   VectorXd x_pred = VectorXd::Zero(n_x_);
-  MatrixXd P_pred = MatrixXd::Zero(n_x_, n_x_);
   for (int i = 0; i < Xsig_pred_.cols(); ++i) {
     x_pred += weights_(i) * Xsig_pred_.col(i);
   }
 
+  MatrixXd P_pred = MatrixXd::Zero(n_x_, n_x_);
   for (int i = 0; i < Xsig_pred_.cols(); ++i) {
     MatrixXd x_diff = Xsig_pred_.col(i) - x_pred;
     x_diff(3) = tools.NormalizeAngle(x_diff(3));
-    MatrixXd x_diff_t = x_diff.transpose();
-    P_pred += weights_(i) * x_diff * x_diff_t;
+    P_pred += weights_(i) * x_diff * x_diff.transpose();
   }
 
   x_ = x_pred;
@@ -230,6 +241,51 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+
+  // laser measures px and py
+  const int n_z = 2;
+
+  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+  for (int i = 0; i < Xsig_pred_.cols(); ++i) {
+    VectorXd xsig_pred = Xsig_pred_.col(i);
+    const double px = xsig_pred(0);
+    const double py = xsig_pred(1);
+
+    VectorXd zsig = VectorXd(n_z);
+    zsig(0) = px;
+    zsig(1) = py;
+    Zsig.col(i) = zsig;
+  }
+
+  VectorXd z_pred = VectorXd::Zero(n_z);
+  for (int i = 0; i < Zsig.cols(); ++i) {
+    z_pred += weights_(i) * Zsig.col(i);
+  }
+
+  MatrixXd S = MatrixXd::Zero(n_z, n_z);
+  for (int i = 0; i < Zsig.cols(); ++i) {
+    MatrixXd z_diff = Zsig.col(i) - z_pred;
+    S += weights_(i) * z_diff * z_diff.transpose();
+  }
+  S += R_laser_;
+
+  MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
+  for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    x_diff(3) = tools.NormalizeAngle(x_diff(3));
+    Tc += weights_(i) * x_diff * z_diff.transpose();
+  }
+
+  MatrixXd K = Tc * S.inverse();
+  VectorXd raw_meas = meas_package.raw_measurements_;
+  VectorXd z = VectorXd(2);
+  z << raw_meas[0],
+       raw_meas[1];
+  VectorXd z_diff = z - z_pred;
+
+  x_ = x_ + K * z_diff;
+  P_ = P_ - K * S * K.transpose();
 }
 
 /**
@@ -279,7 +335,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   S += R_radar_;
 
   MatrixXd Tc = MatrixXd::Zero(n_x_, n_z);
-
   for (int i = 0; i < 2 * n_aug_ + 1; ++i) {
     VectorXd z_diff = Zsig.col(i) - z_pred;
     z_diff(1) = tools.NormalizeAngle(z_diff(1));
@@ -289,7 +344,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   }
 
   MatrixXd K = Tc * S.inverse();
-
   VectorXd raw_meas = meas_package.raw_measurements_;
   VectorXd z = VectorXd(3);
   z << raw_meas[0],
@@ -299,8 +353,5 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   z_diff(1) = tools.NormalizeAngle(z_diff(1));
 
   x_ = x_ + K * z_diff;
-  x_(3) = tools.NormalizeAngle(x_(3));
   P_ = P_ - K * S * K.transpose();
-
-  std::cout << z << "\n\n" << x_ << "\n\n" << P_ << "\n\n\n\n\n";
 }

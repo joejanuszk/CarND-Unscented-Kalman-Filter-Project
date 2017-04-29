@@ -82,6 +82,9 @@ public:
   // radar measurement noise covariance
   MatrixXd R_radar_;
 
+  // laser measurement noise covariance
+  MatrixXd R_laser_;
+
   /**
    * Constructor
    */
