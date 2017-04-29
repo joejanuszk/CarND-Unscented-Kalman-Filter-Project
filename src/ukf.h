@@ -74,6 +74,14 @@ public:
   ///* the current NIS for laser
   double NIS_laser_;
 
+  // reference to tools
+  Tools tools;
+
+  MatrixXd Q_;
+
+  // radar measurement noise covariance
+  MatrixXd R_radar_;
+
   /**
    * Constructor
    */
