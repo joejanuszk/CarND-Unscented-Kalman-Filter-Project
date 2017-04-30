@@ -45,13 +45,6 @@ UKF::UKF() {
   // Radar measurement noise standard deviation radius change in m/s
   std_radrd_ = 0.3;
 
-  /**
-  TODO:
-
-  Complete the initialization. See ukf.h for other member properties.
-
-  Hint: one or more values initialized above might be wildly off...
-  */
   is_initialized_ = false;
 
   // radar can measure r, phi, and r_dot
@@ -90,12 +83,6 @@ UKF::~UKF() {}
  * either radar or laser.
  */
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Make sure you switch between lidar and radar
-  measurements.
-  */
   VectorXd raw_meas = meas_package.raw_measurements_;
 
   if (!is_initialized_) {
@@ -143,12 +130,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
  * measurement and this one.
  */
 void UKF::Prediction(double delta_t) {
-  /**
-  TODO:
-
-  Complete this function! Estimate the object's location. Modify the state
-  vector, x_. Predict sigma points, the state, and the state covariance matrix.
-  */
   VectorXd x_aug = VectorXd::Zero(n_aug_);
   MatrixXd P_aug = MatrixXd::Zero(n_aug_, n_aug_);
 
@@ -239,15 +220,6 @@ void UKF::Prediction(double delta_t) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Use lidar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the lidar NIS.
-  */
-
   MatrixXd Zsig = MatrixXd(n_z_laser_, 2 * n_aug_ + 1);
   for (int i = 0; i < Xsig_pred_.cols(); ++i) {
     VectorXd xsig_pred = Xsig_pred_.col(i);
@@ -303,15 +275,6 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Use radar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the radar NIS.
-  */
-
   MatrixXd Zsig = MatrixXd(n_z_radar_, 2 * n_aug_ + 1);
   for (int i = 0; i < Xsig_pred_.cols(); ++i) {
     VectorXd xsig_pred = Xsig_pred_.col(i);
